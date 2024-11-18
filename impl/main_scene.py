@@ -11,7 +11,7 @@ import threading
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 from PIL import Image
 
-from controller import gesture_recognition_thread  # Import the gesture recognition thread
+from controller import main_scene_gesture_recognition_thread  # Import the gesture recognition thread
 
 # ---------------------- LED Matrix Display ----------------------
 
@@ -149,7 +149,7 @@ def main_scene(gif_path):
     stop_event = threading.Event()
 
     # Start gesture recognition thread from controller.py
-    gesture_thread = threading.Thread(target=gesture_recognition_thread, args=(
+    gesture_thread = threading.Thread(target=main_scene_gesture_recognition_thread, args=(
         matrix, brightness_lock, brightness, active_flag, stop_event))
     gesture_thread.start()
 

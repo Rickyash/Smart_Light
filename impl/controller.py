@@ -53,7 +53,7 @@ def recognize_gesture(hand_landmarks):
     else:
         return "Neutral"
 
-def gesture_recognition_thread(matrix, brightness_lock, brightness, active_flag, stop_event):
+def main_scene_gesture_recognition_thread(matrix, brightness_lock, brightness, active_flag, stop_event):
     """
     Thread function to handle hand gesture recognition.
     Adjusts the brightness of the RGB matrix based on recognized gestures.

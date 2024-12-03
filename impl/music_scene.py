@@ -50,8 +50,6 @@
 
 # asyncio.run(main())
 
-
-
 import cv2
 import mediapipe as mp
 import time
@@ -66,6 +64,127 @@ import pygame
 from pycloudmusic import Music163Api
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 from PIL import Image
+
+# Initialize MediaPipe Hands
+mp_hands = mp.solutions.hands
+
+# ---------------------- Hand Gesture Recognition ----------------------
+
+def recognize_gesture(hand_landmarks):
+    """
+    Recognize hand gestures based on finger positions:
+    - "Start": All four fingers (index, middle, ring, pinky) extended (tips above PIP joints)
+    - "Up": Thumb tip is significantly above the wrist
+    - "Down": Thumb tip is significantly below the wrist
+    - "Neutral": Any other hand position
+    """
+    # Retrieve landmarks
+    wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+    thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+    index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+    index_pip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_PIP]
+    middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+    middle_pip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_PIP]
+    ring_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
+    ring_pip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_PIP]
+    pinky_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
+    pinky_pip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_PIP]
+
+    # Debugging: Print key landmarks
+    print(f"Landmarks Debug - Wrist: {wrist.y:.2f}, Thumb: {thumb_tip.y:.2f}, "
+          f"Index: {index_tip.y:.2f}, Middle: {middle_tip.y:.2f}, Ring: {ring_tip.y:.2f}, Pinky: {pinky_tip.y:.2f}")
+
+    # Define a threshold to account for minor movements/noise
+    threshold = 0.05  # Adjust this value as needed
+
+    # Check for "Start" Gesture: All four fingers extended
+    if (index_tip.y < index_pip.y and
+        middle_tip.y < middle_pip.y and
+        ring_tip.y < ring_pip.y and
+        pinky_tip.y < pinky_pip.y):
+        print("Detected Gesture: Start (Open Hand)")
+        return "Start"
+
+    # Check for "Up" and "Down" Gestures based on thumb position
+    thumb_to_wrist_y = thumb_tip.y - wrist.y
+    if thumb_to_wrist_y < -threshold:
+        print("Detected Gesture: Up (Thumb Above Wrist)")
+        return "Up"
+    elif thumb_to_wrist_y > threshold:
+        print("Detected Gesture: Down (Thumb Below Wrist)")
+        return "Down"
+
+    # Default gesture
+    print("Detected Gesture: Neutral")
+    return "Neutral"
+
+
+# ---------------------- Gesture Recognition Thread ----------------------
+def gesture_recognition_thread(volume, volume_lock, paused, paused_lock, stop_event):
+    cap = cv2.VideoCapture(0)
+    with mp_hands.Hands(
+        static_image_mode=False,
+        max_num_hands=1,  # Allow only one hand for simplicity
+        min_detection_confidence=0.6,  # Slightly increase confidence threshold
+        min_tracking_confidence=0.6
+    ) as hands:
+        print("Gesture Recognition Thread Started.")
+        last_pause_time = time.time()
+        debounce_time = 0.2  # For pause gesture
+
+        while not stop_event.is_set():
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: Failed to read frame from webcam.")
+                break
+
+            # Convert the frame to RGB as MediaPipe uses RGB images
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # Process the frame to detect hands
+            results = hands.process(rgb_frame)
+
+            # Check for hand landmarks
+            if results.multi_hand_landmarks:
+                # Process the first detected hand
+                hand_landmarks = results.multi_hand_landmarks[0]
+
+                # Recognize gesture
+                gesture = recognize_gesture(hand_landmarks)
+
+                # Debugging: Display recognized gesture
+                print(f"Recognized Gesture: {gesture}")
+
+                # Continuous volume adjustment for "Up" and "Down"
+                if gesture == "Up":
+                    with volume_lock:
+                        volume[0] = min(volume[0] + 0.01, 1.0)  # Gradual increase
+                        pygame.mixer.music.set_volume(volume[0])
+                        print(f"Volume increased to {volume[0] * 100:.0f}%")
+                elif gesture == "Down":
+                    with volume_lock:
+                        volume[0] = max(volume[0] - 0.01, 0.0)  # Gradual decrease
+                        pygame.mixer.music.set_volume(volume[0])
+                        print(f"Volume decreased to {volume[0] * 100:.0f}%")
+                elif gesture == "Start" and time.time() - last_pause_time > debounce_time:
+                    # Toggle pause/resume
+                    with paused_lock:
+                        if paused[0]:
+                            pygame.mixer.music.unpause()
+                            print("Music resumed.")
+                            time.sleep(3)
+                        else:
+                            pygame.mixer.music.pause()
+                            print("Music paused.")
+                            time.sleep(3)
+                        paused[0] = not paused[0]
+                    last_pause_time = time.time()
+
+            # Control the frame rate (faster for responsiveness)
+            time.sleep(0.05)  # ~20 FPS
+
+    cap.release()
+    print("Gesture Recognition Thread Exited.")
 
 # ---------------------- Fetch and Process Song Information ----------------------
 
@@ -123,7 +242,7 @@ def preprocess_image(image_data, matrix_width, matrix_height):
 
 # ---------------------- LED Matrix Display ----------------------
 
-def led_display_thread(matrix, background_image, song_name, font, brightness_lock, brightness, active_flag, stop_event):
+def led_display_thread(matrix, background_image, song_name, font, active_flag, stop_event):
     """
     Thread function to handle LED matrix display.
     Displays the background image and scrolls the song name as text.
@@ -135,16 +254,21 @@ def led_display_thread(matrix, background_image, song_name, font, brightness_loc
 
     print("LED Display Thread Started.")
 
+    # Create the frame canvas once outside the loop
+    frame_canvas = matrix.CreateFrameCanvas()
+
     try:
         while not stop_event.is_set():  # Check if the thread is explicitly stopped
             if not active_flag.is_set():  # If paused, wait until active_flag is set
                 time.sleep(0.1)
                 continue
 
-            # Create a new frame canvas
-            frame_canvas = matrix.CreateFrameCanvas()
+            # Clear the canvas for the new frame
+            frame_canvas.Clear()
+
             # Set the background image onto the frame canvas
             frame_canvas.SetImage(background_image)
+
             # Draw the text onto the frame canvas
             try:
                 text_length = graphics.DrawText(frame_canvas, font, pos, y_position, textColor, song_name)
@@ -158,7 +282,7 @@ def led_display_thread(matrix, background_image, song_name, font, brightness_loc
                 pos = frame_canvas.width
 
             # Swap the frame canvas onto the matrix
-            matrix.SwapOnVSync(frame_canvas)
+            frame_canvas = matrix.SwapOnVSync(frame_canvas)
 
             # Control the frame rate
             time.sleep(0.05)  # 20 FPS
@@ -234,58 +358,41 @@ def music_scene(song_id):
     pygame.mixer.music.play()
     print("Playing the downloaded music...")
 
-    # ---------------------- LED Matrix Display Threads ----------------------
-
     # Initialize shared variables
-    brightness_lock = threading.Lock()
-    brightness = [options.brightness]  # Mutable shared variable
     active_flag = threading.Event()
     stop_event = threading.Event()
+
+    volume = [0.5]  # Initial volume
+    paused = [False]
+    volume_lock = threading.Lock()
+    paused_lock = threading.Lock()
+
+    pygame.mixer.music.set_volume(volume[0])
 
     active_flag.set()  # Set the active_flag initially to allow scrolling
 
     # Start LED display thread
     led_thread = threading.Thread(target=led_display_thread, args=(
-        matrix, background_image, song_name, font, brightness_lock, brightness, active_flag, stop_event))
+        matrix, background_image, song_name, font, active_flag, stop_event))
     led_thread.start()
 
-    # ---------------------- Volume and Pause Controls ----------------------
-    print("Controls: + (volume up), - (volume down), p (pause/resume), q (quit)")
+    # Start gesture recognition thread
+    gesture_thread = threading.Thread(target=gesture_recognition_thread, args=(
+        volume, volume_lock, paused, paused_lock, stop_event))
+    gesture_thread.start()
 
-    paused = False
-    volume = 0.5  # Initial volume
-    pygame.mixer.music.set_volume(volume)
+    print("Press CTRL-C to stop.")
 
     try:
-        while True:
-            user_input = input("Enter control: ").strip().lower()
-            if user_input == "+":
-                volume = min(1.0, volume + 0.1)  # Increase volume
-                pygame.mixer.music.set_volume(volume)
-                print(f"Volume increased to {volume * 100:.0f}%")
-            elif user_input == "-":
-                volume = max(0.0, volume - 0.1)  # Decrease volume
-                pygame.mixer.music.set_volume(volume)
-                print(f"Volume decreased to {volume * 100:.0f}%")
-            elif user_input == "p":
-                if paused:
-                    pygame.mixer.music.unpause()
-                    active_flag.set()  # Resume LED scrolling
-                    print("Music resumed.")
-                else:
-                    pygame.mixer.music.pause()
-                    active_flag.clear()  # Pause LED scrolling
-                    print("Music paused.")
-                paused = not paused
-            elif user_input == "q":
-                print("Exiting music scene...")
-                pygame.mixer.music.stop()
-                break
+        while not stop_event.is_set():
+            time.sleep(1)  # Keep the main thread alive
     except KeyboardInterrupt:
         print("\nExiting Music Scene.")
 
-    stop_event.set()  # Signal the thread to stop
+    stop_event.set()
     led_thread.join()
+    gesture_thread.join()
+    pygame.mixer.music.stop()
     sys.exit(0)
 
 if __name__ == "__main__":

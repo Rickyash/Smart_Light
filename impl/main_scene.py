@@ -77,9 +77,13 @@ def led_display_thread(matrix, frame_images, font, brightness_lock, brightness, 
 
     print("LED Display Thread Started.")
 
+    # Create a new frame canvas once outside the loop
+    frame_canvas = matrix.CreateFrameCanvas()
+
     while not stop_event.is_set():
-        # Create a new frame canvas
-        frame_canvas = matrix.CreateFrameCanvas()
+        # Clear the canvas for the new frame
+        frame_canvas.Clear()
+
         # Get the current frame image
         frame_image = frame_images[frame_index]
         # Set the image onto the frame canvas
@@ -97,13 +101,14 @@ def led_display_thread(matrix, frame_images, font, brightness_lock, brightness, 
         if (pos + text_length < 0):
             pos = frame_canvas.width
         # Swap the frame canvas onto the matrix
-        matrix.SwapOnVSync(frame_canvas)
+        frame_canvas = matrix.SwapOnVSync(frame_canvas)
         # Move to the next frame, looping back to the first frame if necessary
         frame_index = (frame_index + 1) % num_frames
         # Control the frame rate
         time.sleep(0.05)  # 20 FPS
 
     print("LED Display Thread Exited.")
+
 
 def main_scene(gif_path):
     # ---------------------- Configuration ----------------------

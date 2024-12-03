@@ -52,7 +52,6 @@
 
 
 
-
 import cv2
 import mediapipe as mp
 import time
@@ -67,8 +66,6 @@ import pygame
 from pycloudmusic import Music163Api
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 from PIL import Image
-
-# from controller import main_scene_gesture_recognition_thread  # Import the gesture recognition thread
 
 # ---------------------- Fetch and Process Song Information ----------------------
 
@@ -134,29 +131,39 @@ def led_display_thread(matrix, background_image, song_name, font, brightness_loc
     # Initialize variables for scrolling text
     textColor = graphics.Color(4, 4, 3)
     pos = matrix.width  # Starting position of the text
-    y_position = matrix.height - 10     # Vertical position of the text
+    y_position = matrix.height - 10  # Vertical position of the text
 
     print("LED Display Thread Started.")
 
-    while not stop_event.is_set():
-        # Create a new frame canvas
-        frame_canvas = matrix.CreateFrameCanvas()
-        # Set the background image onto the frame canvas
-        frame_canvas.SetImage(background_image)
-        # Draw the text onto the frame canvas
-        try:
-            text_length = graphics.DrawText(frame_canvas, font, pos, y_position, textColor, song_name)
-        except Exception as e:
-            print(f"Error drawing text: {e}")
-            text_length = 0
-        # Update text position for scrolling
-        pos -= 1
-        if (pos + text_length < 0):
-            pos = frame_canvas.width
-        # Swap the frame canvas onto the matrix
-        matrix.SwapOnVSync(frame_canvas)
-        # Control the frame rate
-        time.sleep(0.05)  # 20 FPS
+    try:
+        while not stop_event.is_set():  # Check if the thread is explicitly stopped
+            if not active_flag.is_set():  # If paused, wait until active_flag is set
+                time.sleep(0.1)
+                continue
+
+            # Create a new frame canvas
+            frame_canvas = matrix.CreateFrameCanvas()
+            # Set the background image onto the frame canvas
+            frame_canvas.SetImage(background_image)
+            # Draw the text onto the frame canvas
+            try:
+                text_length = graphics.DrawText(frame_canvas, font, pos, y_position, textColor, song_name)
+            except Exception as e:
+                print(f"Error drawing text: {e}")
+                text_length = 0
+
+            # Update text position for scrolling
+            pos -= 1
+            if (pos + text_length < 0):
+                pos = frame_canvas.width
+
+            # Swap the frame canvas onto the matrix
+            matrix.SwapOnVSync(frame_canvas)
+
+            # Control the frame rate
+            time.sleep(0.05)  # 20 FPS
+    except Exception as e:
+        print(f"LED Display Thread encountered an error: {e}")
 
     print("LED Display Thread Exited.")
 
@@ -235,95 +242,52 @@ def music_scene(song_id):
     active_flag = threading.Event()
     stop_event = threading.Event()
 
-    # Start LED display thread
-    led_thread = threading.Thread(target=led_display_thread, args=(
-        matrix, background_image, song_name, font, brightness_lock, brightness, active_flag, stop_event))
-    led_thread.start()
-
-    print("Press CTRL-C to stop.")
-
-    try:
-        while True:
-            time.sleep(1)  # Keep the main thread alive
-    except KeyboardInterrupt:
-        print("\nExiting Music Scene.")
-        stop_event.set()
-        led_thread.join()
-        pygame.mixer.music.stop()  # Stop the music playback
-        sys.exit(0)
-    # ---------------------- Configuration ----------------------
-
-    # Get the event loop
-    loop = asyncio.get_event_loop()
-    # Get the song's name and picture URL
-    song_name, pic_url = loop.run_until_complete(fetch_song_info(song_id))
-
-    print(f"Song Name: {song_name}")
-    print(f"Song Picture URL: {pic_url}")
-
-    # Fetch the image data into memory
-    image_data = fetch_image_data(pic_url)
-
-    # Configuration for the RGB matrix
-    options = RGBMatrixOptions()
-    options.rows = 64
-    options.cols = 64
-    options.chain_length = 1
-    options.parallel = 1
-    options.hardware_mapping = 'adafruit-hat'  # Adjust if using a different hardware mapping
-    options.brightness = 50                   # Initial brightness (0-100)
-    options.gpio_slowdown = 4                 # Adjust GPIO slowdown for stability
-
-    # Initialize the RGB matrix
-    try:
-        matrix = RGBMatrix(options=options)
-    except Exception as e:
-        sys.exit(f"Failed to initialize RGB Matrix: {e}")
-
-    # Preprocess the image
-    background_image = preprocess_image(image_data, matrix.width, matrix.height)
-
-    # Initialize the font
-    font = graphics.Font()
-    # Adjust the path to your font file if necessary
-    font_path = "../res/fonts/7x13.bdf"  # Ensure this path is correct
-    if not os.path.isfile(font_path):
-        sys.exit(f"Font file not found: {font_path}")
-    try:
-        font.LoadFont(font_path)
-    except Exception as e:
-        sys.exit(f"Failed to load font: {e}")
-
-    # Initialize shared variables
-    brightness_lock = threading.Lock()
-    brightness = [options.brightness]  # Mutable shared variable
-    active_flag = threading.Event()
-    stop_event = threading.Event()
-
-    # Start gesture recognition thread from controller.py
-    # gesture_thread = threading.Thread(target=main_scene_gesture_recognition_thread, args=(
-    #     matrix, brightness_lock, brightness, active_flag, stop_event))
-    # gesture_thread.start()
+    active_flag.set()  # Set the active_flag initially to allow scrolling
 
     # Start LED display thread
     led_thread = threading.Thread(target=led_display_thread, args=(
         matrix, background_image, song_name, font, brightness_lock, brightness, active_flag, stop_event))
     led_thread.start()
 
-    print("Press CTRL-C to stop.")
+    # ---------------------- Volume and Pause Controls ----------------------
+    print("Controls: + (volume up), - (volume down), p (pause/resume), q (quit)")
+
+    paused = False
+    volume = 0.5  # Initial volume
+    pygame.mixer.music.set_volume(volume)
 
     try:
         while True:
-            time.sleep(1)  # Keep the main thread alive
+            user_input = input("Enter control: ").strip().lower()
+            if user_input == "+":
+                volume = min(1.0, volume + 0.1)  # Increase volume
+                pygame.mixer.music.set_volume(volume)
+                print(f"Volume increased to {volume * 100:.0f}%")
+            elif user_input == "-":
+                volume = max(0.0, volume - 0.1)  # Decrease volume
+                pygame.mixer.music.set_volume(volume)
+                print(f"Volume decreased to {volume * 100:.0f}%")
+            elif user_input == "p":
+                if paused:
+                    pygame.mixer.music.unpause()
+                    active_flag.set()  # Resume LED scrolling
+                    print("Music resumed.")
+                else:
+                    pygame.mixer.music.pause()
+                    active_flag.clear()  # Pause LED scrolling
+                    print("Music paused.")
+                paused = not paused
+            elif user_input == "q":
+                print("Exiting music scene...")
+                pygame.mixer.music.stop()
+                break
     except KeyboardInterrupt:
         print("\nExiting Music Scene.")
-        stop_event.set()
-        gesture_thread.join()
-        led_thread.join()
-        sys.exit(0)
+
+    stop_event.set()  # Signal the thread to stop
+    led_thread.join()
+    sys.exit(0)
 
 if __name__ == "__main__":
     song_id = 1372554118  
     music_scene(song_id)
-
-# using pygame to controll the voice and music play

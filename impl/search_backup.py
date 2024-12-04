@@ -1,4 +1,4 @@
-# this one runing sometime it will cause the raspberrypi shut down
+# this one runing sometime it will cause the raspberrypi shut down(actually powersupply issue) - fixed
 import cv2
 import mediapipe as mp
 import time

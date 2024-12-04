@@ -9,3 +9,5 @@ For voice recognition
 SpeechRecognition
 pyaudio
 sudo apt-get install flac
+
+For chatting

@@ -37,7 +37,7 @@ def recognize_gesture(hand_landmarks):
     pinky_pip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_PIP]
 
     # Define a threshold to account for minor movements/noise
-    threshold = 0.05  # Adjust this value as needed
+    threshold = 0.05
 
     # Check for "Start" Gesture: All four fingers extended
     if (index_tip.y < index_pip.y and

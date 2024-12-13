@@ -58,7 +58,6 @@ def recognize_gesture(hand_landmarks):
 
 def main_scene_gesture_recognition_thread(matrix, brightness_lock, brightness, active_flag, stop_event):
     """
-    Thread function to handle hand gesture recognition.
     Adjusts the brightness of the RGB matrix based on recognized gestures.
     """
     cap = cv2.VideoCapture(0)
@@ -109,7 +108,6 @@ def main_scene_gesture_recognition_thread(matrix, brightness_lock, brightness, a
                     gesture_start_time = current_time
 
                 elif active and gesture in ["Up", "Down"]:
-                    # To prevent flooding the console, only act if gesture changes or after debounce_time
                     if (gesture != last_gesture) or (current_time - last_brightness_change > debounce_time):
                         print(f"Recognized Gesture: {gesture}")
                         last_gesture = gesture
@@ -119,14 +117,13 @@ def main_scene_gesture_recognition_thread(matrix, brightness_lock, brightness, a
                         # Adjust brightness based on gesture
                         with brightness_lock:
                             if gesture == "Up":
-                                brightness[0] = min(brightness[0] + 10, 100)  # Increase brightness by 10, max 100
+                                brightness[0] = min(brightness[0] + 10, 100) 
                             elif gesture == "Down":
-                                brightness[0] = max(brightness[0] - 10, 0)    # Decrease brightness by 10, min 0
+                                brightness[0] = max(brightness[0] - 10, 0)  
                             # Update the RGB matrix brightness
                             matrix.brightness = brightness[0]
                             print(f"Brightness set to: {brightness[0]}")
 
-            # Limit frame rate to 10 FPS
             time.sleep(0.1)
 
     cap.release()
@@ -143,8 +140,6 @@ def preprocess_gif(image_file, matrix_width, matrix_height):
         gif = Image.open(image_file)
     except IOError:
         sys.exit("Cannot open the provided image. Ensure it's a valid GIF file.")
-
-    # Verify the image is a GIF with multiple frames
     try:
         num_frames = gif.n_frames
     except AttributeError:
@@ -196,11 +191,9 @@ def led_display_thread(matrix, frame_images, font, brightness_lock, brightness, 
 
     print("LED Display Thread Started.")
 
-    # Create a new frame canvas once outside the loop
     frame_canvas = matrix.CreateFrameCanvas()
 
     while not stop_event.is_set():
-        # Clear the canvas for the new frame
         frame_canvas.Clear()
 
         # Get the current frame image
@@ -224,7 +217,7 @@ def led_display_thread(matrix, frame_images, font, brightness_lock, brightness, 
         # Move to the next frame, looping back to the first frame if necessary
         frame_index = (frame_index + 1) % num_frames
         # Control the frame rate
-        time.sleep(0.05)  # 20 FPS
+        time.sleep(0.05)
 
     print("LED Display Thread Exited.")
 
@@ -243,9 +236,9 @@ def main_scene(gif_path):
     options.cols = 64
     options.chain_length = 1
     options.parallel = 1
-    options.hardware_mapping = 'adafruit-hat'  # Adjust if using a different hardware mapping
-    options.brightness = 50                   # Initial brightness (0-100)
-    options.gpio_slowdown = 4                 # Adjust GPIO slowdown for stability
+    options.hardware_mapping = 'adafruit-hat'
+    options.brightness = 70   
+    options.gpio_slowdown = 4  
 
     # Initialize the RGB matrix
     try:
@@ -258,8 +251,7 @@ def main_scene(gif_path):
 
     # Initialize the font
     font = graphics.Font()
-    # Adjust the path to your font file if necessary
-    font_path = "../res/fonts/7x13.bdf"  # Ensure this path is correct
+    font_path = "../res/fonts/7x13.bdf"
     if not os.path.isfile(font_path):
         sys.exit(f"Font file not found: {font_path}")
     try:
@@ -269,7 +261,7 @@ def main_scene(gif_path):
 
     # Initialize shared variables
     brightness_lock = threading.Lock()
-    brightness = [options.brightness]  # Mutable shared variable
+    brightness = [options.brightness]
     active_flag = threading.Event()
     stop_event = threading.Event()
 
@@ -287,7 +279,7 @@ def main_scene(gif_path):
 
     try:
         while True:
-            time.sleep(1)  # Keep the main thread alive
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\nExiting Hand Gesture Recognition and LED Control.")
         stop_event.set()

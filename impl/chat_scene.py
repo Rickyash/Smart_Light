@@ -12,8 +12,8 @@ import threading
 sys.stderr = open(os.devnull, 'w')
 os.environ["PYTHONWARNINGS"] = "ignore"
 
-# Set your OpenAI API key
-openai.api_key = "API-KEY"  # Replace with your actual API key
+# Set OpenAI API key 
+# openai.api_key = "API-KEY"
 
 # LED Matrix configuration
 options = RGBMatrixOptions()
@@ -21,46 +21,33 @@ options.rows = 64
 options.cols = 64
 options.chain_length = 1
 options.parallel = 1
-options.brightness = 75  # Max brightness
+options.brightness = 75 
 options.gpio_slowdown = 4
 
 matrix = RGBMatrix(options=options)
 
 def display_text_with_fade_and_move(text, fade_out=False, delay=0.05):
-    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"  # Update if necessary
+    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
     font_size = 8
-
     try:
         font = ImageFont.truetype(font_path, font_size)
     except IOError:
-        print("Font file not found. Please install the specified font.")
         sys.exit(1)
-
-    # Calculate text size
     dummy_image = Image.new("RGB", (1, 1))
     dummy_draw = ImageDraw.Draw(dummy_image)
     text_width, text_height = dummy_draw.textsize(text, font=font)
-
-    # Create an image wide enough to scroll the text from right to left
-    image_width = text_width + 64  # Extra space to move off-screen
+    image_width = text_width + 64
     image = Image.new("RGB", (image_width, 64), (0, 0, 0))
     draw = ImageDraw.Draw(image)
-
-    # Position the text initially off the right side of the display
     y_position = (64 - text_height) // 2
     draw.text((64, y_position), text, font=font, fill=(255, 255, 255))
-
-    # Move the text to the left across the display
-    for x in range(0, image_width - 64 + 1):  # from 0 to image_width -64
+    for x in range(0, image_width - 64 + 1):
         frame = image.crop((x, 0, x + 64, 64))
         matrix.SetImage(frame)
         time.sleep(delay)
-
-    # Gradual fade-out
     if fade_out:
-        for brightness in range(255, -1, -16):  # Decrement brightness
+        for brightness in range(255, -1, -16):
             faded_image = image.point(lambda p: p * (brightness / 255))
-            # Display the last 64x64 pixels
             frame = faded_image.crop((image_width - 64, 0, image_width, 64))
             matrix.SetImage(frame.convert("RGB"))
             time.sleep(delay)
@@ -161,7 +148,7 @@ def display_gif(gif_path, stop_event, delay=0.1):
     matrix.Clear()
 
 def display_static_text(text, background_color=(255, 255, 255), text_color=(0, 0, 0)):
-    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"  # Update if necessary
+    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
     font_size = 10
 
     try:
@@ -184,58 +171,34 @@ def display_static_text(text, background_color=(255, 255, 255), text_color=(0, 0
     # Display the image on the LED matrix
     matrix.SetImage(image)
 
-def main():
+def chat_scene():
     while True:
-        # Create an event to control the display thread
         display_stop_event = threading.Event()
-        
-        # Start the default display thread
-        default_display_thread = threading.Thread(
-            target=display_static_text, 
-            args=("SAY HELLO THERE!",)
-        )
+        default_display_thread = threading.Thread(target=display_static_text, args=("CHAT",))
         default_display_thread.start()
-
-        # Listen for the wake word
         wake_detected = listen_for_wake_word()
-        
         if wake_detected:
-            # Stop the default display
             display_stop_event.set()
             default_display_thread.join()
-
-            # Create an event to signal the display thread to stop
             stop_event = threading.Event()
-            
-            # Start the display thread for GIF
-            display_thread = threading.Thread(target=display_gif, args=("../res/gifs/city.gif", stop_event,))
+            display_thread = threading.Thread(target=display_gif, args=("../res/gifs/loop.gif", stop_event,))
             display_thread.start()
-
-            # Listen for the user's query
             query = listen_for_query()
-
-            # Signal the display thread to stop and wait for it to finish
             stop_event.set()
             display_thread.join()
-
             if query:
                 answer = get_openai_response(query)
                 if answer:
-                    print(f"Assistant: {answer}")
-                    display_text_with_fade_and_move(answer, fade_out=True)  # Display response with fade effects
-                else:
-                    print("Failed to get a response from the assistant.")
+                    display_text_with_fade_and_move(answer, fade_out=True)
         else:
-            # Stop the default display if wake word is not detected
             display_stop_event.set()
             default_display_thread.join()
-            print("Wake word not detected. Please try again.\n")
 
 def test():
     display_text_with_fade_and_move("okay!wwwwwwwwwwwwwwwwwwwwww", fade_out=True) 
 
 if __name__ == "__main__":
     try:
-        main()
+        chat_scene()
     except KeyboardInterrupt:
         print("\nAssistant terminated by user.")

@@ -79,7 +79,6 @@ async def search_music_by_voice(limit=1):
 
             # Iterate through the generator to get the first music item
             for music in music_generator:
-                # Assuming `music` has an attribute `id`
                 print(f"Found Music: {music.name} by {music.artist} (ID: {music.id})")
                 return music.id
 

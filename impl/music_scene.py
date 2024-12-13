@@ -43,7 +43,7 @@ def recognize_gesture(hand_landmarks):
           f"Index: {index_tip.y:.2f}, Middle: {middle_tip.y:.2f}, Ring: {ring_tip.y:.2f}, Pinky: {pinky_tip.y:.2f}")
 
     # Define a threshold to account for minor movements/noise
-    threshold = 0.05  # Adjust this value as needed
+    threshold = 0.05 
 
     # Check for "Start" Gesture: All four fingers extended
     if (index_tip.y < index_pip.y and
@@ -73,7 +73,7 @@ def gesture_recognition_thread(volume, volume_lock, paused, paused_lock, stop_ev
     with mp_hands.Hands(
         static_image_mode=False,
         max_num_hands=1,  # Allow only one hand for simplicity
-        min_detection_confidence=0.6,  # Slightly increase confidence threshold
+        min_detection_confidence=0.6,
         min_tracking_confidence=0.6
     ) as hands:
         print("Gesture Recognition Thread Started.")
@@ -233,7 +233,7 @@ def led_display_thread(matrix, background_image, song_name, font, active_flag, s
             frame_canvas = matrix.SwapOnVSync(frame_canvas)
 
             # Control the frame rate
-            time.sleep(0.05)  # 20 FPS
+            time.sleep(0.05)
     except Exception as e:
         print(f"LED Display Thread encountered an error: {e}")
 
@@ -261,9 +261,9 @@ def music_scene(song_id):
     options.cols = 64
     options.chain_length = 1
     options.parallel = 1
-    options.hardware_mapping = 'adafruit-hat'  # Adjust if using a different hardware mapping
-    options.brightness = 50                   # Initial brightness (0-100)
-    options.gpio_slowdown = 4                 # Adjust GPIO slowdown for stability
+    options.hardware_mapping = 'adafruit-hat' 
+    options.brightness = 50               
+    options.gpio_slowdown = 4        
 
     # Initialize the RGB matrix
     try:
@@ -276,7 +276,7 @@ def music_scene(song_id):
 
     # Initialize the font
     font = graphics.Font()
-    font_path = "../res/fonts/7x13.bdf"  # Ensure this path is correct
+    font_path = "../res/fonts/7x13.bdf"  
     if not os.path.isfile(font_path):
         sys.exit(f"Font file not found: {font_path}")
     try:
@@ -310,7 +310,7 @@ def music_scene(song_id):
     active_flag = threading.Event()
     stop_event = threading.Event()
 
-    volume = [0.5]  # Initial volume
+    volume = [0.5] 
     paused = [False]
     volume_lock = threading.Lock()
     paused_lock = threading.Lock()
